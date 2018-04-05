@@ -1,9 +1,9 @@
 package main
 
 import (
-	//"database/sql"
+	//"github.com/boltdb/bolt"
 	"fmt"
-	"github.com/expectocode/oryza-urlgen"
+	"github.com/expectocode/oryza/backend/urlgen"
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/telegram-bot-api.v4"
 	"log"
@@ -27,6 +27,9 @@ func main() {
 
 	urlgen.Setup()
 	updates, err := bot.GetUpdatesChan(u)
+	if err != nil {
+		log.Panic("Error getting bot updates: ", err)
+	}
 
 	// bot update loop
 	for update := range updates {
@@ -63,7 +66,7 @@ func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if upload_msg == nil {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
 			"Please reply to a message to upload it")
-		msg.Text += "; " + urlgen.GenUrl()
+		msg.Text += "; " + urlgen.GenLongUrl() + "; " + urlgen.RandAlphanum(4)
 		msg.ReplyToMessageID = update.Message.MessageID
 		bot.Send(msg)
 		return

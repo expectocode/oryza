@@ -30,9 +30,10 @@ func Setup() {
 		"Simulated", "Smart", "4K"}
 	//ings = []string{"Bypassing", "Hacking", "Overriding", "Compressing", "Copying",
 	//"Navigating", "Indexing", "Connecting", "Generating", "Quantifying",
-	//"Calculating", "Synthesizing", "Transmitting", "Programming", "Parsing",
-	//"Leeching", "Consuming", "Sniffing", "Decrypting", "Designing", "Compiling",
-	//"Interpreting", "Serializing", "Torrenting", "Encrypting", "Patching"}
+	//"Calculating", "Synthesizing", "Transmitting", "Programming", "Rebooting",
+	//"Parsing", "Leeching", "Consuming", "Sniffing", "Decrypting", "Designing",
+	//"Compiling", "Interpreting", "Serializing", "Torrenting", "Encrypting",
+	//"Patching"}
 	verbs = []string{"Bypass", "Hack", "Override", "Compress", "Copy", "Navigate",
 		"Index", "Connect", "Generate", "Quantify", "Calculate", "Synthesize",
 		"Input", "Transmit", "Program", "Reboot", "Parse", "Leech", "Consume",
@@ -46,11 +47,37 @@ func Setup() {
 		"Padding", "Message", "Signal", "Buffer", "Stack"}
 }
 
-func GenUrl() string {
+func GenLongUrl() string {
 	return fmt.Sprintf("%s%s%s%s", choice(&verbs),
 		choice(&adjs),
 		choice(&abbrs),
 		choice(&nouns))
+}
+
+const alnumBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const (
+    letterIdxBits = 6                    // 6 bits to represent a 62-letter index
+    letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+    letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+func RandAlphanum(n int) string {
+	// Generate a decent random string of length n from alnumBytes
+    b := make([]byte, n)
+    // A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+    for i, cache, remain := n-1, rand.Int63(), letterIdxMax; i >= 0; {
+        if remain == 0 {
+            cache, remain = rand.Int63(), letterIdxMax
+        }
+        if idx := int(cache & letterIdxMask); idx < len(alnumBytes) {
+            b[i] = alnumBytes[idx]
+            i--
+        }
+        cache >>= letterIdxBits
+        remain--
+    }
+
+    return string(b)
 }
 
 //func main() {
