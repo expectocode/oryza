@@ -1,18 +1,21 @@
 package main
 
 import (
+	//"database/sql"
 	"fmt"
+	"github.com/expectocode/oryza-urlgen"
+	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/telegram-bot-api.v4"
 	"log"
-	"strings"
-	"github.com/expectocode/backend"
 	"os"
+	"regexp"
+	"strings"
 )
 
 func main() {
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("ORYZA_TOKEN"))
 	if err != nil {
-		log.Panic(err)
+		log.Panic("Could not get oryza token: ", err)
 	}
 
 	bot.Debug = true
@@ -22,10 +25,8 @@ func main() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
+	urlgen.Setup()
 	updates, err := bot.GetUpdatesChan(u)
-
-	back := backend.NewBackend(os.Getenv("ORYZA_DB"))
-	log.Printf("Backend %s", back)
 
 	// bot update loop
 	for update := range updates {
@@ -36,10 +37,22 @@ func main() {
 		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
 		// If it's a /upload, upload the reply-message.
 		// Else if it's a private chat, upload the message.
-		if strings.HasPrefix(update.Message.Text, "/upload") {
-			HandleUploadCommand(bot, update)
+		if strings.HasPrefix(update.Message.Text, "/") {
+			if matched, _ := regexp.MatchString("^/upload($|\\s)", update.Message.Text); matched {
+				//if strings.HasPrefix(update.Message.Text, "/upload") {
+				go HandleUploadCommand(bot, update)
+			} else if matched, _ := regexp.MatchString("^/delete?($|\\s)", update.Message.Text); matched {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Deletion not implemented yet")
+				msg.ReplyToMessageID = update.Message.MessageID
+				go bot.Send(msg)
+				//check if theres a url in the /delete <thing> or in the reply message
+			} else {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Unrecognised command")
+				msg.ReplyToMessageID = update.Message.MessageID
+				go bot.Send(msg)
+			}
 		} else if update.Message.Chat.IsPrivate() {
-			Upload(update.Message, update.Message.From.ID, update.Message.Date)
+			go Upload(update.Message, update.Message.From.ID, update.Message.Date)
 		}
 	}
 }
@@ -50,6 +63,8 @@ func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if upload_msg == nil {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
 			"Please reply to a message to upload it")
+		msg.Text += "; " + urlgen.GenUrl()
+		msg.ReplyToMessageID = update.Message.MessageID
 		bot.Send(msg)
 		return
 	}
@@ -74,6 +89,6 @@ func Upload(message *tgbotapi.Message, sender_id int, send_timestamp int) {
 			filename = fmt.Sprintf("%s", message.Date)
 		}
 		log.Printf("%s", filename)
-	//	backend.upload(filename, mimetype, "file", sender_id, send_timestamp)
+		//	backend.upload(filename, mimetype, "file", sender_id, send_timestamp)
 	}
 }
