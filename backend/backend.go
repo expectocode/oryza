@@ -12,20 +12,20 @@ import (
 )
 
 type File struct {
-	Mime       string
-	Display    string
-	Path       string
-	Size       int
-	Uri        string
-	User       int
-	ExtraInfo  string
-	UploadTime time.Time
+	Mime		string
+	Display		string
+	Path		string
+	Size		int
+	Uri			string
+	User		int
+	ExtraInfo	string
+	UploadTime	time.Time
 }
 
 type User struct {
-	ID         int
-	Token      string
-	TelegramID int // This is 0 if there isn't one.
+	ID			int // 0 ID is invalid
+	Token		string
+	Name		string
 }
 
 type Backend struct {
@@ -99,7 +99,9 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 */
 
 func main() {
-	b := NewBackend("testdb.db")
+	db_path := os.Getenv("ORYZA_DB")
+	log.Println("Oryza db path: ", db_path)
+	b := NewBackend(db_path)
 	b.create_tables()
 
 	router := mux.NewRouter()
