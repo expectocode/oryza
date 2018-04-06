@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+	"mime"
 )
 
 func choice(arr *[]string) string {
@@ -47,7 +48,7 @@ func Setup() {
 		"Padding", "Message", "Signal", "Buffer", "Stack"}
 }
 
-func GenLongUrl() string {
+func GenLongUri() string {
 	return fmt.Sprintf("%s%s%s%s", choice(&verbs),
 		choice(&adjs),
 		choice(&abbrs),
@@ -78,6 +79,15 @@ func RandAlphanum(n int) string {
     }
 
     return string(b)
+}
+
+func GetExtension(mimetype string) string {
+	exts, _ := mime.ExtensionsByType(mimetype)
+	var ext string
+	if exts != nil {
+		ext = string(exts[0])
+	}
+	return ext
 }
 
 //func main() {
