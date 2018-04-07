@@ -44,7 +44,6 @@ func main() {
 	}
 
 	tokenMode := make(map[int]bool)
-	idTokenMap := make(map[int]string)
 	db_path := os.Getenv("ORYZA_BOT_DB")
 	if db_path == "" {
 		log.Panic("ORYZA_BOT_DB must be set!")
@@ -60,20 +59,6 @@ func main() {
 		}
 		return nil
 	})
-
-	// Initialise id-token map
-	db.View(func(tx *bolt.Tx) error {
-		// Assume bucket exists and has keys
-		b := tx.Bucket([]byte("IdTokenMap"))
-
-		b.ForEach(func(k, v []byte) error {
-			id := int(binary.LittleEndian.Uint32(k))
-			idTokenMap[id] = string(v)
-			return nil
-		})
-		return nil
-	})
-	log.Println("Initialized id-token map with", idTokenMap)
 
 	// bot update loop
 	for update := range updates {
@@ -102,6 +87,7 @@ func main() {
 				go bot.Send(msg)
 				continue
 			} // So from now on, it's a good token format.
+			// Insert the token
 			db.Update(func(tx *bolt.Tx) error {
 				b := tx.Bucket([]byte("IdTokenMap"))
 				bin := make([]byte, 4)
@@ -119,7 +105,7 @@ Report this: %s`, err))
 			})
 			tokenMode[update.Message.From.ID] = false
 			msg = tgbotapi.NewMessage(update.Message.Chat.ID,
-				"Thanks! You can now upload through me with /upload")
+				"Thanks! You can now upload through me with /upload or by PMing me")
 			msg.ReplyToMessageID = update.Message.MessageID
 			go bot.Send(msg)
 			continue
@@ -129,7 +115,7 @@ Report this: %s`, err))
 		if strings.HasPrefix(update.Message.Text, "/") {
 			if matched, _ := regexp.MatchString("^/upload($|\\s)",
 				update.Message.Text); matched {
-				go HandleUploadCommand(bot, update, idTokenMap)
+				go HandleUploadCommand(bot, update, db)
 			} else if matched, _ := regexp.MatchString("^/delete?($|\\s)",
 				update.Message.Text); matched {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID,
@@ -147,9 +133,24 @@ Report this: %s`, err))
 				go bot.Send(msg)
 			}
 		} else if update.Message.Chat.IsPrivate() {
-			go HandlePrivateMessage(bot, update, idTokenMap)
+			go HandlePrivateMessage(bot, update, db)
 		}
 	}
+}
+
+func getToken(id uint32, db *bolt.DB) string {
+	var token string
+	db.View(func(tx *bolt.Tx) error {
+		// Assume bucket exists and has keys
+		b := tx.Bucket([]byte("IdTokenMap"))
+		bin := make([]byte, 4)
+		binary.LittleEndian.PutUint32(bin, id)
+		v := b.Get(bin)
+
+		token = string(v)
+		return nil
+	})
+	return token
 }
 
 func requestToken(bot *tgbotapi.BotAPI, update tgbotapi.Update, modemap *map[int]bool) {
@@ -160,10 +161,9 @@ func requestToken(bot *tgbotapi.BotAPI, update tgbotapi.Update, modemap *map[int
 	(*modemap)[update.Message.From.ID] = true
 }
 
-func HandlePrivateMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update,
-	tokenmap map[int]string) {
+func HandlePrivateMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *bolt.DB) {
 	// Message.Chat is the same as Message.From in PM
-	token := tokenmap[update.Message.From.ID]
+	token := getToken(uint32(update.Message.From.ID), db)
 	if token == "" {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
 			"You must send me your upload token with /start before you can use me")
@@ -172,7 +172,7 @@ func HandlePrivateMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update,
 		return
 	}
 
-	resp, err := Upload(bot, update.Message, token)
+	resp, err := Upload(bot, update.Message, token, db)
 	if err != nil {
 		fail(bot, update.Message.From.ID, update.Message.MessageID,
 			fmt.Sprintf("Could not upload: %s", err))
@@ -184,12 +184,11 @@ func HandlePrivateMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update,
 	}
 }
 
-func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update,
-	tokenmap map[int]string) {
+func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *bolt.DB) {
 
 	if update.Message.Chat.IsPrivate() {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
-			"Command not available in PM")
+			"Just send me what you want to upload.")
 		msg.ReplyToMessageID = update.Message.MessageID
 		bot.Send(msg)
 		return
@@ -205,7 +204,7 @@ func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update,
 		return
 	}
 
-	token := tokenmap[update.Message.From.ID]
+	token := getToken(uint32(update.Message.From.ID), db)
 	if token == "" {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
 			"You must send me your upload token in PM before you can use me")
@@ -214,7 +213,7 @@ func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update,
 		return
 	}
 
-	resp, err := Upload(bot, upload_msg, token)
+	resp, err := Upload(bot, upload_msg, token, db)
 	if err != nil {
 		fail(bot, update.Message.From.ID, update.Message.MessageID,
 			fmt.Sprintf("Could not upload: %s", err))
@@ -258,8 +257,8 @@ func newUploadRequest(mimetype, filename, token string,
 	return req, err
 }
 
-func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string) (string, error) {
-	log.Println("TOKEN HEREHRCH RC ", token)
+func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string,
+	db *bolt.DB) (string, error) {
 	//Try to upload the given message as text, photo, or file
 	//TODO implement this with a bunch of calls to the backend
 		if message.Document != nil {

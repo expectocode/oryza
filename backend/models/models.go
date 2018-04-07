@@ -250,7 +250,6 @@ func (b Backend) DeleteFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
-	//TODO
 	// Insert ID, name, and token into the DB, and make their dir.
 	password, exists := os.LookupEnv("ORYZA_ROOT_PASSWORD")
 	if !exists {
@@ -332,7 +331,6 @@ func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
-	//TODO
 	file_shorturi := mux.Vars(r)["fileid"]
 
 	var path string
