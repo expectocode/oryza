@@ -16,8 +16,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const DomainName = "http://up.unix.porn"
-
 type File struct {
 	ID         int
 	Mime       string
@@ -30,25 +28,34 @@ type File struct {
 	UploadTime time.Time
 }
 
-type User struct {
-	ID         int
-	Token      string
-	TelegramID int // This is 0 if there isn't one.
-}
+//type User struct {
+	//ID         int
+	//Token      string
+	//TelegramID int // This is 0 if there isn't one.
+//}
 
 type Backend struct {
 	FileRoot string
 	DB       *sql.DB
 }
 
-func NewBackend(db_path string) *Backend {
+var DomainName string
+
+func Setup(db_path string) *Backend {
 	db, err := sql.Open("sqlite3", db_path)
 	if err != nil {
 		log.Fatal("Could not open DB: ", err)
 	}
 	fileroot := os.Getenv("ORYZA_ROOT")
+	if fileroot == "" {
+		log.Fatal("You must set $ORYZA_ROOT")
+	}
 	if !strings.HasSuffix(fileroot, "/") {
 		fileroot = fileroot + "/"
+	}
+	DomainName = os.Getenv("ORYZA_DOMAIN_NAME")
+	if DomainName == "" {
+		log.Fatal("You must set $ORYZA_DOMAIN_NAME")
 	}
 	log.Printf("Oryza file root: %s", fileroot)
 	b := Backend{fileroot, db}
@@ -132,7 +139,7 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 			fail(w, "Invalid upload token!")
 			return
 		} else if err != nil {
-			fail(w, fmt.Sprintf("Report this error: %s", err))
+			fail(w, fmt.Sprintf("user id db error: %s", err))
 			log.Println("Error getting uploader id", err)
 			return
 		}
@@ -159,7 +166,7 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 			// Great!
 			non_duplicate = true
 		} else if err != nil {
-			fail(w, fmt.Sprintf("Report this error: %s", err))
+			fail(w, fmt.Sprintf("random generation error: %s", err))
 			log.Println("Error getting shortname duplicity", err)
 			return
 		}
@@ -167,7 +174,7 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 	file.ShortUri += urlgen.GetExtension(file.Mime)
 
 	// Save path without the root before it
-	file.Path = fmt.Sprintf("%d/%s%s", file.Uploader, file.ShortUri)
+	file.Path = fmt.Sprintf("%d/%s", file.Uploader, file.ShortUri)
 
 	// Generate longuri
 	non_duplicate = false
@@ -199,10 +206,11 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 	log.Println("File", file)
 
 	fullpath := b.FileRoot + file.Path // Fileroot should always end in /
+	log.Println("Full path", fullpath)
 	f, err := os.Create(fullpath)
 	if err != nil {
 		log.Printf("Error making disk file on upload: %s", err)
-		fail(w, fmt.Sprintf("Error saving file. Report this: %s", err))
+		fail(w, fmt.Sprintf("Error saving file: %s", err))
 		return
 	}
 	defer f.Close()
@@ -225,7 +233,7 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 		file.Mime, file.Path, file.Size, file.ShortUri, file.LongUri,
 		file.Uploader, file.ExtraInfo, file.UploadTime.Unix())
 	if err != nil {
-		fail(w, fmt.Sprintf("Report this error! Could not save file: %s", err))
+		fail(w, fmt.Sprintf("Could not save file: %s", err))
 		log.Printf("Could not save file to DB: %s", err)
 		return
 	}
@@ -312,21 +320,38 @@ func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = os.Mkdir(fmt.Sprintf("%s/%d", b.FileRoot, uid), os.ModeDir | 0777)
+	err = os.Mkdir(fmt.Sprintf("%s/%d", b.FileRoot, uid), os.ModeDir|0777)
 	if err != nil {
 		log.Println("Error making user dir for ID %d: %s", uid, err)
 	}
 
 	// Success!
 	things := map[string]string{"success": "true",
-	"userid": fmt.Sprintf("%d", uid), "token": token}
+		"userid": fmt.Sprintf("%d", uid), "token": token}
 	json.NewEncoder(w).Encode(things)
 }
 
 func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	//TODO
-	things := map[string]string{"test": mux.Vars(r)["fileid"]}
-	json.NewEncoder(w).Encode(things)
+	file_shorturi := mux.Vars(r)["fileid"]
+
+	var path string
+	err := b.DB.QueryRow("select path from file where shorturi = ?", file_shorturi).Scan(&path)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// TODO nice 404 page
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("404 not found"))
+			return
+		} else if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("error: %s", err)))
+			return
+		}
+	}
+	path = b.FileRoot + path
+	log.Println("path being getted:", path)
+	http.ServeFile(w, r, path)
 }
 
 /*

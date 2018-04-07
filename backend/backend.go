@@ -1,19 +1,19 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"time"
-	"log"
 
-	"github.com/gorilla/mux"
 	"github.com/expectocode/oryza/backend/models"
+	"github.com/gorilla/mux"
 )
 
 func main() {
 	db_path := os.Getenv("ORYZA_DB")
 	log.Println("Oryza db path: ", db_path)
-	b := models.NewBackend(db_path)
+	b := models.Setup(db_path)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/api/upload", b.UploadFile).Methods("POST")
