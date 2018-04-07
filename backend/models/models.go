@@ -350,6 +350,7 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	}
 	path = b.FileRoot + path
 	log.Println("path being getted:", path)
+	//TODO change content type of things like HTML to text/plain
 	http.ServeFile(w, r, path)
 }
 
