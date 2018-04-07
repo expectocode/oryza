@@ -29,9 +29,9 @@ type File struct {
 }
 
 //type User struct {
-	//ID         int
-	//Token      string
-	//TelegramID int // This is 0 if there isn't one.
+//ID         int
+//Token      string
+//TelegramID int // This is 0 if there isn't one.
 //}
 
 type Backend struct {
@@ -190,8 +190,8 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 		// Check if there is already a file with this name
 		var id int
-		err = b.DB.QueryRow("select id from file where LongURI = ?",
-			file.LongUri).Scan(&id)
+		err = b.DB.QueryRow("select id from file where LongURI like ?",
+			file.LongUri+".%").Scan(&id)
 		if err == sql.ErrNoRows {
 			// Great!
 			non_duplicate = true
@@ -334,7 +334,8 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	file_shorturi := mux.Vars(r)["fileid"]
 
 	var path string
-	err := b.DB.QueryRow("select path from file where shorturi = ?", file_shorturi).Scan(&path)
+	err := b.DB.QueryRow("select path from file where shorturi like ?",
+		file_shorturi+".%").Scan(&path)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// TODO nice 404 page
