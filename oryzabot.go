@@ -1,21 +1,34 @@
 package main
 
 import (
-	//"github.com/boltdb/bolt"
+	"encoding/binary"
 	"fmt"
-	"github.com/expectocode/oryza/backend/urlgen"
-	_ "github.com/mattn/go-sqlite3"
-	"gopkg.in/telegram-bot-api.v4"
 	"log"
 	"os"
 	"regexp"
+	"io"
+	"io/ioutil"
+	"errors"
+	"bytes"
 	"strings"
+	"time"
+	"net/http"
+	"mime/multipart"
+	"encoding/json"
+
+	"github.com/boltdb/bolt"
+	"gopkg.in/telegram-bot-api.v4"
 )
 
+const apiUrl = "http://localhost:8000/api/"
 func main() {
-	bot, err := tgbotapi.NewBotAPI(os.Getenv("ORYZA_TOKEN"))
+	botToken := os.Getenv("ORYZA_BOT_TOKEN")
+	if botToken == "" {
+		log.Panic("You must set $ORYZA_BOT_TOKEN")
+	}
+	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
-		log.Panic("Could not get oryza token: ", err)
+		log.Panic("Could not start bot: %s", err)
 	}
 
 	bot.Debug = true
@@ -25,73 +38,272 @@ func main() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	urlgen.Setup()
 	updates, err := bot.GetUpdatesChan(u)
 	if err != nil {
 		log.Panic("Error getting bot updates: ", err)
 	}
 
+	tokenMode := make(map[int]bool)
+	idTokenMap := make(map[int]string)
+	db_path := os.Getenv("ORYZA_BOT_DB")
+	if db_path == "" {
+		log.Panic("ORYZA_BOT_DB must be set!")
+	}
+	db, err := bolt.Open(db_path, 0600, &bolt.Options{Timeout: 2 * time.Second})
+	if err != nil {
+		log.Fatal("Could not open bolt db: %s", err)
+	}
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("IdTokenMap"))
+		if err != nil {
+			return fmt.Errorf("create bucket error: %s", err)
+		}
+		return nil
+	})
+
+	// Initialise id-token map
+	db.View(func(tx *bolt.Tx) error {
+		// Assume bucket exists and has keys
+		b := tx.Bucket([]byte("IdTokenMap"))
+
+		b.ForEach(func(k, v []byte) error {
+			id := int(binary.LittleEndian.Uint32(k))
+			idTokenMap[id] = string(v)
+			return nil
+		})
+		return nil
+	})
+	log.Println("Initialized id-token map with", idTokenMap)
+
 	// bot update loop
 	for update := range updates {
-		if update.Message == nil {
+		if update.Message == nil || update.Message.From == nil {
+			// Message.From may be nil if the message is in a Channel
+			// but who would use this in a channel?
 			continue
 		}
 
 		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+		if tokenMode[update.Message.From.ID] {
+			// If we are waiting for a token from this person, dont take commands
+			var msg tgbotapi.MessageConfig
+			if matched, _ := regexp.MatchString("/cancel($|\\s)", update.Message.Text); matched {
+				msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Cancelled.")
+				msg.ReplyToMessageID = update.Message.MessageID
+				go bot.Send(msg)
+				tokenMode[update.Message.From.ID] = false
+				continue
+				} else if matched, _ := regexp.MatchString("[a-zA-Z0-9]{16}",
+				update.Message.Text); !matched {
+				// This doesn't look like a token
+				msg = tgbotapi.NewMessage(update.Message.Chat.ID,
+					`Hm, that doesn't look like a token. It should be 16 chars of letters and numbers. (send /cancel to stop)`)
+				msg.ReplyToMessageID = update.Message.MessageID
+				go bot.Send(msg)
+				continue
+			} // So from now on, it's a good token format.
+			db.Update(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte("IdTokenMap"))
+				bin := make([]byte, 4)
+				binary.LittleEndian.PutUint32(bin, uint32(update.Message.From.ID))
+				err = b.Put(bin, []byte(update.Message.Text))
+				if err != nil {
+					msg = tgbotapi.NewMessage(update.Message.Chat.ID,
+						fmt.Sprintf(`Error saving your token, sorry!
+Report this: %s`, err))
+					msg.ReplyToMessageID = update.Message.MessageID
+					go bot.Send(msg)
+					return fmt.Errorf("insert error: %s", err)
+				}
+				return nil
+			})
+			tokenMode[update.Message.From.ID] = false
+			msg = tgbotapi.NewMessage(update.Message.Chat.ID,
+				"Thanks! You can now upload through me with /upload")
+			msg.ReplyToMessageID = update.Message.MessageID
+			go bot.Send(msg)
+			continue
+		}
 		// If it's a /upload, upload the reply-message.
 		// Else if it's a private chat, upload the message.
 		if strings.HasPrefix(update.Message.Text, "/") {
-			if matched, _ := regexp.MatchString("^/upload($|\\s)", update.Message.Text); matched {
-				//if strings.HasPrefix(update.Message.Text, "/upload") {
-				go HandleUploadCommand(bot, update)
-			} else if matched, _ := regexp.MatchString("^/delete?($|\\s)", update.Message.Text); matched {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Deletion not implemented yet")
+			if matched, _ := regexp.MatchString("^/upload($|\\s)",
+				update.Message.Text); matched {
+				go HandleUploadCommand(bot, update, idTokenMap)
+			} else if matched, _ := regexp.MatchString("^/delete?($|\\s)",
+				update.Message.Text); matched {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+					"Deletion not implemented yet")
 				msg.ReplyToMessageID = update.Message.MessageID
 				go bot.Send(msg)
 				//check if theres a url in the /delete <thing> or in the reply message
+			} else if matched, _ := regexp.MatchString("^/start($|\\s)",
+				update.Message.Text); matched {
+				go requestToken(bot, update, &tokenMode)
 			} else {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Unrecognised command")
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+					"Unrecognised command")
 				msg.ReplyToMessageID = update.Message.MessageID
 				go bot.Send(msg)
 			}
 		} else if update.Message.Chat.IsPrivate() {
-			go Upload(update.Message, update.Message.From.ID, update.Message.Date)
+			go HandlePrivateMessage(bot, update, idTokenMap)
 		}
 	}
 }
 
-func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	//Upload the replied to message. If there is no reply, complain.
-	upload_msg := update.Message.ReplyToMessage
-	if upload_msg == nil {
+func requestToken(bot *tgbotapi.BotAPI, update tgbotapi.Update, modemap *map[int]bool) {
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+		"Please send your upload token")
+	msg.ReplyToMessageID = update.Message.MessageID
+	bot.Send(msg)
+	(*modemap)[update.Message.From.ID] = true
+}
+
+func HandlePrivateMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update,
+	tokenmap map[int]string) {
+	// Message.Chat is the same as Message.From in PM
+	token := tokenmap[update.Message.From.ID]
+	if token == "" {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
-			"Please reply to a message to upload it")
-		msg.Text += "; " + urlgen.GenLongUrl() + "; " + urlgen.RandAlphanum(4)
+			"You must send me your upload token with /start before you can use me")
 		msg.ReplyToMessageID = update.Message.MessageID
 		bot.Send(msg)
 		return
 	}
 
-	// Message.From may be nil if the message is in a Channel
-	// but who would use this in a channel?
-	Upload(upload_msg, update.Message.From.ID, update.Message.Date)
+	resp, err := Upload(bot, update.Message, token)
+	if err != nil {
+		fail(bot, update.Message.From.ID, update.Message.MessageID,
+			fmt.Sprintf("Could not upload: %s", err))
+	}
+	if resp != "" {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, resp)
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Send(msg)
+	}
+}
+
+func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update,
+	tokenmap map[int]string) {
+
+	if update.Message.Chat.IsPrivate() {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+			"Command not available in PM")
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Send(msg)
+		return
+	}
+
+	//Upload the replied to message. If there is no reply, complain.
+	upload_msg := update.Message.ReplyToMessage
+	if upload_msg == nil {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+			"Please reply to a message to upload it")
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Send(msg)
+		return
+	}
+
+	token := tokenmap[update.Message.From.ID]
+	if token == "" {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+			"You must send me your upload token in PM before you can use me")
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Send(msg)
+		return
+	}
+
+	resp, err := Upload(bot, upload_msg, token)
+	if err != nil {
+		fail(bot, update.Message.From.ID, update.Message.MessageID,
+			fmt.Sprintf("Could not upload: %s", err))
+	}
+	if resp != "" {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, resp)
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Send(msg)
+	}
 	//msg := tgbotapi.NewMessage(update.Message.Chat.ID, "received")
 	//msg.ReplyToMessageID = update.Message.MessageID
 	//bot.Send(msg)
 }
 
-func Upload(message *tgbotapi.Message, sender_id int, send_timestamp int) {
+func fail(bot *tgbotapi.BotAPI, to_id int, reply_id int, text string) {
+	log.Printf("Error with user %d: %s", to_id, text)
+	msg := tgbotapi.NewMessage(int64(to_id), "Report this error: " + text)
+	msg.ReplyToMessageID = reply_id
+	bot.Send(msg)
+}
+
+func newUploadRequest(mimetype, filename, token string,
+	filebody io.ReadCloser) (*http.Request, error) {
+
+	body := &bytes.Buffer{}
+	mwriter := multipart.NewWriter(body)
+	part, err := mwriter.CreateFormFile("uploadfile", filename)
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(part, filebody)
+	mwriter.WriteField("mimetype", mimetype)
+	mwriter.WriteField("token", token)
+	err = mwriter.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", apiUrl + "upload", body)
+	req.Header.Set("Content-Type", mwriter.FormDataContentType())
+	return req, err
+}
+
+func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string) (string, error) {
+	log.Println("TOKEN HEREHRCH RC ", token)
 	//Try to upload the given message as text, photo, or file
 	//TODO implement this with a bunch of calls to the backend
-	if message.Document != nil {
-		var filename string
-		if message.Document.FileName != "" {
-			filename = message.Document.FileName
-		} else {
-			//TODO Make filename from other data - time, sender, mime. Or maybe just random alphanum
-			filename = fmt.Sprintf("%s", message.Date)
+		if message.Document != nil {
+		fileurl, err := bot.GetFileDirectURL(message.Document.FileID)
+		if err != nil {
+			return "", err
 		}
-		log.Printf("%s", filename)
-		//	backend.upload(filename, mimetype, "file", sender_id, send_timestamp)
+		log.Printf("File ID %s, url %s, mime %s", message.Document.FileID, fileurl,
+			message.Document.MimeType)
+		fileresp, err := http.Get(fileurl); if err != nil {
+			return "", err
+		}
+		defer fileresp.Body.Close()
+		client := http.Client{}
+		// Send to upload API
+		req, err := newUploadRequest(message.Document.MimeType,
+			message.Document.FileName, token, fileresp.Body)
+		if err != nil {
+			return "", err
+		}
+		resp, err := client.Do(req); if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		data := make(map[string]interface{})
+		rBody, err := ioutil.ReadAll(resp.Body)
+		log.Println("API response body", resp.Body)
+		err = json.Unmarshal(rBody, &data); if err != nil {
+			return "", err
+		}
+		log.Println("API response", data)
+		succ, ok := data["success"].(string); if !ok {
+			return "", errors.New("could not interpret api response")
+		}
+		if succ == "true" {
+			url, ok := data["url"].(string); if !ok {
+				return "", errors.New("could not interpret api response")
+			}
+			return fmt.Sprintf("Uploaded at %s", url), nil
+		} else {
+			return "", errors.New(fmt.Sprintf("%s", data["reason"]))
+		}
+
 	}
+	log.Println("finished")
+	return "Unrecognised message type", nil
 }
