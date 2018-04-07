@@ -1,26 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
-	"os"
-	"regexp"
 	"io"
 	"io/ioutil"
-	"errors"
-	"bytes"
+	"log"
+	"mime/multipart"
+	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"time"
-	"net/http"
-	"mime/multipart"
-	"encoding/json"
 
 	"github.com/boltdb/bolt"
 	"gopkg.in/telegram-bot-api.v4"
 )
 
 const apiUrl = "http://localhost:8000/api/"
+
 func main() {
 	botToken := os.Getenv("ORYZA_BOT_TOKEN")
 	if botToken == "" {
@@ -78,7 +79,7 @@ func main() {
 				go bot.Send(msg)
 				tokenMode[update.Message.From.ID] = false
 				continue
-				} else if matched, _ := regexp.MatchString("[a-zA-Z0-9]{16}",
+			} else if matched, _ := regexp.MatchString("[a-zA-Z0-9]{16}",
 				update.Message.Text); !matched {
 				// This doesn't look like a token
 				msg = tgbotapi.NewMessage(update.Message.Chat.ID,
@@ -230,7 +231,7 @@ func HandleUploadCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, db *bolt.
 
 func fail(bot *tgbotapi.BotAPI, to_id int, reply_id int, text string) {
 	log.Printf("Error with user %d: %s", to_id, text)
-	msg := tgbotapi.NewMessage(int64(to_id), "Report this error: " + text)
+	msg := tgbotapi.NewMessage(int64(to_id), "Report this error: "+text)
 	msg.ReplyToMessageID = reply_id
 	bot.Send(msg)
 }
@@ -252,7 +253,7 @@ func newUploadRequest(mimetype, filename, token string,
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", apiUrl + "upload", body)
+	req, err := http.NewRequest("POST", apiUrl+"upload", body)
 	req.Header.Set("Content-Type", mwriter.FormDataContentType())
 	return req, err
 }
@@ -261,14 +262,15 @@ func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string,
 	db *bolt.DB) (string, error) {
 	//Try to upload the given message as text, photo, or file
 	//TODO implement this with a bunch of calls to the backend
-		if message.Document != nil {
+	if message.Document != nil {
 		fileurl, err := bot.GetFileDirectURL(message.Document.FileID)
 		if err != nil {
 			return "", err
 		}
 		log.Printf("File ID %s, url %s, mime %s", message.Document.FileID, fileurl,
 			message.Document.MimeType)
-		fileresp, err := http.Get(fileurl); if err != nil {
+		fileresp, err := http.Get(fileurl)
+		if err != nil {
 			return "", err
 		}
 		defer fileresp.Body.Close()
@@ -279,22 +281,26 @@ func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string,
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.Do(req); if err != nil {
+		resp, err := client.Do(req)
+		if err != nil {
 			return "", err
 		}
 		defer resp.Body.Close()
 		data := make(map[string]interface{})
 		rBody, err := ioutil.ReadAll(resp.Body)
 		log.Println("API response body", resp.Body)
-		err = json.Unmarshal(rBody, &data); if err != nil {
+		err = json.Unmarshal(rBody, &data)
+		if err != nil {
 			return "", err
 		}
 		log.Println("API response", data)
-		succ, ok := data["success"].(string); if !ok {
+		succ, ok := data["success"].(string)
+		if !ok {
 			return "", errors.New("could not interpret api response")
 		}
 		if succ == "true" {
-			url, ok := data["url"].(string); if !ok {
+			url, ok := data["url"].(string)
+			if !ok {
 				return "", errors.New("could not interpret api response")
 			}
 			return fmt.Sprintf("Uploaded at %s", url), nil
