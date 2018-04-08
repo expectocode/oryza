@@ -1,0 +1,6 @@
+export ORYZA_BOT_TOKEN=1234:ABCD
+export ORYZA_BOT_DB=/path/to/bot.db
+export ORYZA_ROOT=/path/to/storage/folder # trailing / optional
+export ORYZA_DB=/path/to/main.db
+export ORYZA_ROOT_PASSWORD=AdminPassword
+export ORYZA_DOMAIN_NAME=oryza.example.com
