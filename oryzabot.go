@@ -72,43 +72,7 @@ func main() {
 		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
 		if tokenMode[update.Message.From.ID] {
 			// If we are waiting for a token from this person, dont take commands
-			var msg tgbotapi.MessageConfig
-			if matched, _ := regexp.MatchString("/cancel($|\\s)", update.Message.Text); matched {
-				msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Cancelled.")
-				msg.ReplyToMessageID = update.Message.MessageID
-				go bot.Send(msg)
-				tokenMode[update.Message.From.ID] = false
-				continue
-			} else if matched, _ := regexp.MatchString("[a-zA-Z0-9]{16}",
-				update.Message.Text); !matched {
-				// This doesn't look like a token
-				msg = tgbotapi.NewMessage(update.Message.Chat.ID,
-					`Hm, that doesn't look like a token. It should be 16 chars of letters and numbers. (send /cancel to stop)`)
-				msg.ReplyToMessageID = update.Message.MessageID
-				go bot.Send(msg)
-				continue
-			} // So from now on, it's a good token format.
-			// Insert the token
-			db.Update(func(tx *bolt.Tx) error {
-				b := tx.Bucket([]byte("IdTokenMap"))
-				bin := make([]byte, 4)
-				binary.LittleEndian.PutUint32(bin, uint32(update.Message.From.ID))
-				err = b.Put(bin, []byte(update.Message.Text))
-				if err != nil {
-					msg = tgbotapi.NewMessage(update.Message.Chat.ID,
-						fmt.Sprintf(`Error saving your token, sorry!
-Report this: %s`, err))
-					msg.ReplyToMessageID = update.Message.MessageID
-					go bot.Send(msg)
-					return fmt.Errorf("insert error: %s", err)
-				}
-				return nil
-			})
-			tokenMode[update.Message.From.ID] = false
-			msg = tgbotapi.NewMessage(update.Message.Chat.ID,
-				"Thanks! You can now upload through me with /upload or by PMing me")
-			msg.ReplyToMessageID = update.Message.MessageID
-			go bot.Send(msg)
+			receiveToken(bot, update, &tokenMode, db)
 			continue
 		}
 		// If it's a /upload, upload the reply-message.
@@ -154,7 +118,49 @@ func getToken(id uint32, db *bolt.DB) string {
 	return token
 }
 
-func requestToken(bot *tgbotapi.BotAPI, update tgbotapi.Update, modemap *map[int]bool) {
+func receiveToken(bot *tgbotapi.BotAPI, update tgbotapi.Update,
+	modemap *map[int]bool, db *bolt.DB) {
+	var msg tgbotapi.MessageConfig
+	if matched, _ := regexp.MatchString("/cancel($|\\s)", update.Message.Text); matched {
+		msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Cancelled.")
+		msg.ReplyToMessageID = update.Message.MessageID
+		go bot.Send(msg)
+		(*modemap)[update.Message.From.ID] = false
+		return
+	} else if matched, _ := regexp.MatchString("[a-zA-Z0-9]{16}",
+		update.Message.Text); !matched {
+		// This doesn't look like a token
+		msg = tgbotapi.NewMessage(update.Message.Chat.ID,
+			`Hm, that doesn't look like a token. It should be 16 chars of letters and numbers. (send /cancel to stop)`)
+		msg.ReplyToMessageID = update.Message.MessageID
+		go bot.Send(msg)
+		return
+	} // So from now on, it's a good token format.
+	// Insert the token
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("IdTokenMap"))
+		bin := make([]byte, 4)
+		binary.LittleEndian.PutUint32(bin, uint32(update.Message.From.ID))
+		err := b.Put(bin, []byte(update.Message.Text))
+		if err != nil {
+			msg = tgbotapi.NewMessage(update.Message.Chat.ID,
+				fmt.Sprintf(`Error saving your token, sorry!
+Report this: %s`, err))
+			msg.ReplyToMessageID = update.Message.MessageID
+			go bot.Send(msg)
+			return fmt.Errorf("insert error: %s", err)
+		}
+		return nil
+	})
+	(*modemap)[update.Message.From.ID] = false
+	msg = tgbotapi.NewMessage(update.Message.Chat.ID,
+		"Thanks! You can now upload through me with /upload or by PMing me")
+	msg.ReplyToMessageID = update.Message.MessageID
+	go bot.Send(msg)
+}
+
+func requestToken(bot *tgbotapi.BotAPI, update tgbotapi.Update,
+	modemap *map[int]bool) {
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID,
 		"Please send your upload token")
 	msg.ReplyToMessageID = update.Message.MessageID
