@@ -160,8 +160,8 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 		// Check if there is already a file with this name
 		var id int
-		err = b.DB.QueryRow("select id from file where ShortURI = ?",
-			file.ShortUri).Scan(&id)
+		err = b.DB.QueryRow("select id from file where ShortURI like ?",
+			file.ShortUri+".%").Scan(&id)
 		if err == sql.ErrNoRows {
 			// Great!
 			non_duplicate = true
@@ -331,11 +331,12 @@ func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
-	file_shorturi := mux.Vars(r)["fileid"]
+	file_uri := mux.Vars(r)["fileid"]
+	// TODO show a details page on longuri
 
 	var path string
-	err := b.DB.QueryRow("select path from file where shorturi like ?",
-		file_shorturi+".%").Scan(&path)
+	err := b.DB.QueryRow("select path from file where shorturi = ?",
+		file_uri).Scan(&path)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// TODO nice 404 page
