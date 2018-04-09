@@ -32,7 +32,7 @@ func main() {
 		log.Panic("Could not start bot: %s", err)
 	}
 
-	bot.Debug = true
+	bot.Debug = false
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
@@ -242,7 +242,7 @@ func fail(bot *tgbotapi.BotAPI, to_id int, reply_id int, text string) {
 	bot.Send(msg)
 }
 
-func newUploadRequest(mimetype, filename, token string,
+func newUploadRequest(mimetype, filename, token, extraInfo string,
 	filebody io.ReadCloser) (*http.Request, error) {
 
 	body := &bytes.Buffer{}
@@ -254,6 +254,7 @@ func newUploadRequest(mimetype, filename, token string,
 	_, err = io.Copy(part, filebody)
 	mwriter.WriteField("mimetype", mimetype)
 	mwriter.WriteField("token", token)
+	mwriter.WriteField("extrainfo", extraInfo)
 	err = mwriter.Close()
 	if err != nil {
 		return nil, err
@@ -266,8 +267,12 @@ func newUploadRequest(mimetype, filename, token string,
 
 func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string,
 	db *bolt.DB) (string, error) {
-	//Try to upload the given message as text, photo, or file
-	//TODO implement this with a bunch of calls to the backend
+	// Try to upload the given message as text, photo, or file
+	// Return a bot response and an error, mutually exclusive
+	// TODO implement other media types
+	var uploadReq *http.Request
+	client := http.Client{}
+
 	if message.Document != nil {
 		fileurl, err := bot.GetFileDirectURL(message.Document.FileID)
 		if err != nil {
@@ -280,41 +285,74 @@ func Upload(bot *tgbotapi.BotAPI, message *tgbotapi.Message, token string,
 			return "", err
 		}
 		defer fileresp.Body.Close()
-		client := http.Client{}
-		// Send to upload API
-		req, err := newUploadRequest(message.Document.MimeType,
-			message.Document.FileName, token, fileresp.Body)
+		// Form a POST request
+		uploadReq, err = newUploadRequest(message.Document.MimeType,
+			message.Document.FileName, token, message.Caption, fileresp.Body)
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.Do(req)
+	} else if message.Photo != nil {
+		biggest_photo := (*message.Photo)[len((*message.Photo))-1]
+		log.Println("photo message %s", biggest_photo)
+		fileurl, err := bot.GetFileDirectURL(biggest_photo.FileID)
 		if err != nil {
 			return "", err
 		}
-		defer resp.Body.Close()
-		data := make(map[string]interface{})
-		rBody, err := ioutil.ReadAll(resp.Body)
-		log.Println("API response body", resp.Body)
-		err = json.Unmarshal(rBody, &data)
+		fileresp, err := http.Get(fileurl)
 		if err != nil {
 			return "", err
 		}
-		log.Println("API response", data)
-		succ, ok := data["success"].(string)
+		defer fileresp.Body.Close()
+		// Form a POST request
+		uploadReq, err = newUploadRequest("image/jpeg", // photos always jpeg
+			"photo", token, message.Caption, fileresp.Body)
+		if err != nil {
+			return "", err
+		}
+	} else if message.Sticker != nil {
+		fileurl, err := bot.GetFileDirectURL(message.Sticker.FileID)
+		if err != nil {
+			return "", err
+		}
+		fileresp, err := http.Get(fileurl)
+		if err != nil {
+			return "", err
+		}
+		defer fileresp.Body.Close()
+		uploadReq, err = newUploadRequest("image/webp", // stickers always webp
+			"sticker", token, "", fileresp.Body)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		return "Unrecognised message type", nil
+	}
+
+	log.Println("finished, uploading")
+	resp, err := client.Do(uploadReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	data := make(map[string]interface{})
+	rBody, err := ioutil.ReadAll(resp.Body)
+	log.Println("API response body", resp.Body)
+	err = json.Unmarshal(rBody, &data)
+	if err != nil {
+		return "", err
+	}
+	log.Println("API response", data)
+	succ, ok := data["success"].(string)
+	if !ok {
+		return "", errors.New("could not interpret api response")
+	}
+	if succ == "true" {
+		url, ok := data["url"].(string)
 		if !ok {
 			return "", errors.New("could not interpret api response")
 		}
-		if succ == "true" {
-			url, ok := data["url"].(string)
-			if !ok {
-				return "", errors.New("could not interpret api response")
-			}
-			return fmt.Sprintf("Uploaded at %s", url), nil
-		} else {
-			return "", errors.New(fmt.Sprintf("%s", data["reason"]))
-		}
-
+		return fmt.Sprintf("Uploaded at %s", url), nil
+	} else {
+		return "", errors.New(fmt.Sprintf("%s", data["reason"]))
 	}
-	log.Println("finished")
-	return "Unrecognised message type", nil
 }

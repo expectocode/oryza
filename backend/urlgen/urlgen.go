@@ -62,6 +62,7 @@ const (
     letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 )
 
+// thanks stackoverflow
 func RandAlphanum(n int) string {
 	// Generate a decent random string of length n from alnumBytes
     b := make([]byte, n)
@@ -85,22 +86,16 @@ func GetExtension(mimetype string) string {
 	exts, _ := mime.ExtensionsByType(mimetype)
 	var ext string
 	if exts != nil {
+		// If we have some values, use the first
 		ext = string(exts[0])
+	} else if mimetype == "image/webp" {
+		// No detected extension for webp
+		ext = ".webp"
 	}
 	if ext == ".asc" {
+		// Who uses asc??
 		ext = ".txt"
 	}
 	// TODO consider adding custom eg x-log=.log, x-compressed-tar=.tar.gz
 	return ext
 }
-
-//func main() {
-//rand.Seed(time.Now().Unix())
-//log.Printf("Abbr %s", choice(&abbrs))
-//log.Printf("Adj %s", choice(&adjs))
-//log.Printf("Ingverb %s", choice(&ings))
-//log.Printf("Verb %s", choice(&verbs))
-//log.Printf("Noun %s", choice(&nouns))
-//log.Printf("Full shorturl %s%s%s%s", choice(&verbs), choice(&adjs), choice(&abbrs), choice(&nouns))
-//log.Printf("%d %d %d %d. Tot %d", len(verbs), len(adjs), len(abbrs), len(nouns), len(verbs) * len(adjs) * len(abbrs) * len(nouns))
-//}

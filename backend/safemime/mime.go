@@ -81,6 +81,7 @@ func SafeMime() func(string) string {
 
 		"image/gif":					"image/gif",
 		"image/jpeg":					"image/jpeg",
+		"image/webp":					"image/webp",
 		"image/jpg":					"image/jpg",
 		"image/pjpeg":					"image/pjpeg",
 		"image/png":					"image/png",
