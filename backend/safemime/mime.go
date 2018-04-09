@@ -55,7 +55,7 @@ func SafeMime() func(string) string {
 		"application/x-oleobject":		"application/x-oleobject",
 		"application/java-archive":		"application/java-archive",
 		"application/manifest+json":	"text/plain", // safe
-		"application/x-xpinstall":		"application/x-xpinstall",
+		"application/x-xpinstall":		"application/octet-stream", // safe
 		"application/xml":				"text/plain", // safe
 		"application/xhtml+xml":		"text/plain", // safe
 		"application/xslt+xml":			"text/plain", // safe
