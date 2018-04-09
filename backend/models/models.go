@@ -82,7 +82,8 @@ func (b Backend) createTables() {
 						   LongURI TEXT NOT NULL,
 						   UploaderID INTEGER NOT NULL,
 						   ExtraInfo TEXT NOT NULl,
-						   UploadTime INTEGER NOT NULL)`)
+						   UploadTime INTEGER NOT NULL,
+						   Deleted INTEGER NOT NULL DEFAULT 0)`)
 	if err != nil {
 		log.Fatal("Could not create table file: ", err)
 	}
