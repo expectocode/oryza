@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/expectocode/oryza/backend/urlgen"
+	"github.com/expectocode/oryza/backend/safemime"
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -336,8 +337,9 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	// TODO show a details page on longuri
 
 	var path string
-	err := b.DB.QueryRow("select path from file where shorturi = ?",
-		file_uri).Scan(&path)
+	var mimetype string
+	err := b.DB.QueryRow("select mimetype, path from file where shorturi = ?",
+		file_uri).Scan(&mimetype, &path)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// TODO nice 404 page
@@ -352,9 +354,13 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	}
 	path = b.FileRoot + path
 	log.Println("path being getted:", path)
-	//TODO change content type of things like HTML to text/plain
+	mimetype = safemime.SafeMime()(mimetype)
+	log.Println("safe mime type", mimetype)
+	// TODO log unknown mime types here
+	w.Header().Set("Content-Type", mimetype)
 	http.ServeFile(w, r, path)
 }
+
 
 /*
 	def upload(self, filename, mimetype, display, uploader, uploadtime):

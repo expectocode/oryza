@@ -87,6 +87,9 @@ func GetExtension(mimetype string) string {
 	if exts != nil {
 		ext = string(exts[0])
 	}
+	if ext == ".asc" {
+		ext = ".txt"
+	}
 	// TODO consider adding custom eg x-log=.log, x-compressed-tar=.tar.gz
 	return ext
 }
