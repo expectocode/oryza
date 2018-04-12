@@ -88,9 +88,13 @@ func GetExtension(mimetype string) string {
 	if exts != nil {
 		// If we have some values, use the first
 		ext = string(exts[0])
-	} else if mimetype == "image/webp" {
-		// No detected extension for webp
-		ext = ".webp"
+	} else {
+		// No detected extension
+		var extras map[string]string{
+			"image/webp":		".webp",
+			"text/x-python":	".py"
+		}
+		ext = extras[mimetype]
 	}
 	if ext == ".asc" {
 		// Who uses asc??

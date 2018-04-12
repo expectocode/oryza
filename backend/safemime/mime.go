@@ -104,6 +104,7 @@ func SafeMime() func(string) string {
 
 		"text/enriched":				"text/enriched",
 		"text/calendar":				"text/calendar",
+		"text/x-python":				"text/plain"
 		"text/html":					"text/plain", // safe
 		"text/plain":					"text/plain",
 		"text/richtext":				"text/richtext",
