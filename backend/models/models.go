@@ -247,7 +247,23 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 func (b Backend) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	//TODO
-	things := map[string]string{"test": mux.Vars(r)["fileid"]}
+	file_uri := mux.Vars(r)["fileid"]
+	var path string
+	var uploaderid int
+
+	err := b.DB.QueryRow("select uploaderid, path from file where shorturi = ? or longuri = ?",
+		file_uri, file_uri).Scan(&uploaderid, &path)
+	if err == sql.ErrNoRows {
+		// 404
+		w.WriteHeader(http.StatusNotFound)
+		fail(w, "Not Found")
+		return
+	} else if err != nil {
+		fail(w, fmt.Sprintf("Please report this DB error: %s", err))
+		log.Println("Error querying DB when deleting file %s: %s", file_uri, err)
+		return
+	}
+	// If sender is not uploader, 403
 	json.NewEncoder(w).Encode(things)
 }
 
@@ -342,7 +358,7 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 		file_uri).Scan(&mimetype, &path)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// TODO nice 404 page
+			// TODO nice 404 page or https://imgs.xkcd.com/comics/not_available.png
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte("404 not found"))
 			return
