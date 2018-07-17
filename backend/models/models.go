@@ -71,6 +71,7 @@ func (b Backend) createTables() {
 						   ID INTEGER PRIMARY KEY AUTOINCREMENT,
 						   Name TEXT NOT NULl,
 						   UploadToken TEXT NOT NULL)`)
+                           // Token could be UNIQUE but we enforce that on generation anyway
 	if err != nil {
 		log.Fatal("Could not create table user: ", err)
 	}

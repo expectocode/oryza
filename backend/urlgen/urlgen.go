@@ -90,9 +90,9 @@ func GetExtension(mimetype string) string {
 		ext = string(exts[0])
 	} else {
 		// No detected extension
-		var extras map[string]string{
+		extras := map[string]string{
 			"image/webp":		".webp",
-			"text/x-python":	".py"
+			"text/x-python":	".py",
 		}
 		ext = extras[mimetype]
 	}
