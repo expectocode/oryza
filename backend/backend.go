@@ -21,6 +21,10 @@ func main() {
 	router.HandleFunc("/{fileid}", b.DeleteFile).Methods("DELETE")
 	router.HandleFunc("/{fileid}", b.GetFile).Methods("GET")
 
+	// TODO add file listing
+	// TODO add token existence verification
+	// TODO detail-related api calls
+
 	srv := &http.Server{
 		Handler:      router,
 		Addr:         ":8000",
