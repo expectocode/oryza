@@ -248,7 +248,10 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 func (b Backend) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	//TODO
-	things := map[string]string{"test": mux.Vars(r)["fileid"]}
+	fileid := mux.Vars(r)["fileid"]
+	token := r.FormValue("token")
+
+	_, err = b.DB.Exec("UPDATE File SET Deleted = 1 WHERE "
 	json.NewEncoder(w).Encode(things)
 }
 
@@ -339,7 +342,7 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 
 	var path string
 	var mimetype string
-	err := b.DB.QueryRow("select mimetype, path from file where shorturi = ?",
+	err := b.DB.QueryRow("select mimetype, path from file where shorturi = ? and deleted = 0",
 		file_uri).Scan(&mimetype, &path)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -361,9 +364,3 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mimetype)
 	http.ServeFile(w, r, path)
 }
-
-
-/*
-	def upload(self, filename, mimetype, display, uploader, uploadtime):
-		pass
-*/
