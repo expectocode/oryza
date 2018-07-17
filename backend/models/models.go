@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/expectocode/oryza/backend/urlgen"
 	"github.com/expectocode/oryza/backend/safemime"
+	"github.com/expectocode/oryza/backend/urlgen"
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -71,7 +71,7 @@ func (b Backend) createTables() {
 						   ID INTEGER PRIMARY KEY AUTOINCREMENT,
 						   Name TEXT NOT NULl,
 						   UploadToken TEXT NOT NULL)`)
-                           // Token could be UNIQUE but we enforce that on generation anyway
+	// Token could be UNIQUE but we enforce that on generation anyway
 	if err != nil {
 		log.Fatal("Could not create table user: ", err)
 	}
@@ -251,8 +251,10 @@ func (b Backend) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	fileid := mux.Vars(r)["fileid"]
 	token := r.FormValue("token")
 
-	_, err = b.DB.Exec("UPDATE File SET Deleted = 1 WHERE "
-	json.NewEncoder(w).Encode(things)
+	// TODO check that FileID exists, then check that this token uploaded it.
+
+	// _, err = b.DB.Exec("UPDATE File SET Deleted = 1 WHERE "
+	json.NewEncoder(w).Encode(map[string]string{"fileid": fileid, "token": token, "fullurl": r.URL.String()})
 }
 
 func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
@@ -327,6 +329,7 @@ func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 	err = os.Mkdir(fmt.Sprintf("%s/%d", b.FileRoot, uid), os.ModeDir|0777)
 	if err != nil {
+		fail(w, fmt.Sprintf("Error making user dir for user ID %d: %s", uid, err))
 		log.Println("Error making user dir for ID %d: %s", uid, err)
 	}
 
