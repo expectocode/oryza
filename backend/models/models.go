@@ -110,7 +110,6 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	token := r.FormValue("token")
 	if token == "" {
-		log.Println("token", token)
 		fail(w, "token cannot be empty")
 		return
 	}
@@ -247,14 +246,63 @@ func (b Backend) UploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b Backend) DeleteFile(w http.ResponseWriter, r *http.Request) {
-	//TODO
 	fileid := mux.Vars(r)["fileid"]
 	token := r.FormValue("token")
 
-	// TODO check that FileID exists, then check that this token uploaded it.
+	// check that FileID exists, then check that the owner of this token uploaded it.
 
-	// _, err = b.DB.Exec("UPDATE File SET Deleted = 1 WHERE "
-	json.NewEncoder(w).Encode(map[string]string{"fileid": fileid, "token": token, "fullurl": r.URL.String()})
+	// TODO what about LONGURIs?
+	var uploaderID int
+	err := b.DB.QueryRow("select uploaderID from file where ShortUri = ?",
+		fileid).Scan(&uploaderID)
+	if err == sql.ErrNoRows {
+		fail(w, "No file with this ShortURI")
+		return
+	} else if err != nil {
+		fail(w, "Error checking db for fileid deletion")
+		log.Println("Error checking db for fileid for deletion", fileid)
+		return
+	}
+
+	var token_holder int
+	err = b.DB.QueryRow("select ID from user where UploadToken = ?",
+		token).Scan(&token_holder)
+	if err == sql.ErrNoRows {
+		// This token is invalid, no user associated with it.
+		fail(w, "invalid token")
+		return
+	} else if err != nil {
+		fail(w, fmt.Sprintf("error checking token: %s", err))
+		log.Println("Error checking token for file deletion", err)
+		return
+	}
+
+	if token_holder != uploaderID {
+		fail(w, "you do not have permission to delete this file")
+		return
+	}
+
+	var deleted int
+	err = b.DB.QueryRow("select Deleted from File where ShortURI = ?",
+		fileid).Scan(&deleted)
+	if err != nil {
+		log.Println("Error checking if file deleted with shorturi", fileid)
+		fail(w, "Error checking if file already deleted")
+		return
+	}
+	if deleted == 1 {
+		fail(w, "Cannot delete file which has already been deleted")
+		return
+	}
+
+	_, err = b.DB.Exec("UPDATE File SET Deleted = 1 WHERE ShortURI = ?", fileid)
+	if err != nil {
+		fail(w, "could not delete file entry")
+		log.Println("Error setting file as deleted with ShortURI", fileid)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
 }
 
 func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +319,10 @@ func (b Backend) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		fail(w, "Password may not be empty")
 		return
 	}
-	log.Println("Password", password, pass)
+	if pass != password {
+		fail(w, "Wrong admin password")
+		return
+	}
 
 	name := r.FormValue("name")
 	if name == "" {
@@ -347,6 +398,7 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	var mimetype string
 	err := b.DB.QueryRow("select mimetype, path from file where shorturi = ? and deleted = 0",
 		file_uri).Scan(&mimetype, &path)
+	// TODO say if it's been deleted
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// TODO nice 404 page
@@ -366,4 +418,64 @@ func (b Backend) GetFile(w http.ResponseWriter, r *http.Request) {
 	// TODO log unknown mime types here
 	w.Header().Set("Content-Type", mimetype)
 	http.ServeFile(w, r, path)
+}
+
+type FileListing struct {
+	URL          string `json:"url"`
+	Size         int    `json:"size"`          // bytes
+	DateUploaded int    `json:"date-uploaded"` // unix timestamp
+	ShortURI     string `json:"shorturi"`
+	LongURI      string `json:"longuri"`
+	MimeType     string `json:"mimetype"`
+	ExtraInfo    string `json:"extra-info"`
+	Deleted      bool   `json:"deleted"`
+}
+
+func (b Backend) ListUploads(w http.ResponseWriter, r *http.Request) {
+	token := r.FormValue("token")
+	if token == "" {
+		fail(w, "token cannot be empty")
+		return
+	}
+
+	var uploaderID int
+	err := b.DB.QueryRow("select id from user where uploadtoken = ?",
+		token).Scan(&uploaderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			fail(w, "Invalid upload token!")
+			return
+		} else if err != nil {
+			fail(w, fmt.Sprintf("user id db error: %s", err))
+			log.Println("Error getting uploader id", err)
+			return
+		}
+	}
+
+	// Get info on all uploads from this user
+	var listing []FileListing
+
+	rows, err := b.DB.Query("select size, UploadTime, ShortURI, LongURI, MimeType, ExtraInfo, Deleted from File where uploaderid = ?", uploaderID)
+	if err != nil {
+		log.Println("Error retrieving rows for file listing", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var f FileListing
+		// Note that we do nothing for URL here - that comes later.
+		err := rows.Scan(&f.Size, &f.DateUploaded, &f.ShortURI, &f.LongURI, &f.MimeType,
+			&f.ExtraInfo, &f.Deleted)
+		if err != nil {
+			log.Println("Error retrieving data for file listing", err)
+		}
+		f.URL = DomainName + "/" + f.ShortURI
+		listing = append(listing, f)
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Println("Error with file listing db rows", err)
+	}
+
+	json.NewEncoder(w).Encode(listing)
 }
