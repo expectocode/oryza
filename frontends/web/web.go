@@ -61,3 +61,7 @@ func UploadsPage(w http.ResponseWriter, r *http.Request) {
 		fail(w, data["reason"].(string))
 	}
 }
+
+func MainPage(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("unix.porn upload service for /rice/ and friends. you can access a list of your files at https://up.unix.porn/web/{your token}/uploads"))
+}

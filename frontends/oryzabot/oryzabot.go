@@ -20,7 +20,7 @@ import (
 	"gopkg.in/telegram-bot-api.v4"
 )
 
-const apiUrl = "http://localhost:8000/api/"
+const apiUrl = "https://up.unix.porn:443/api/"
 
 func main() {
 	botToken := os.Getenv("ORYZA_BOT_TOKEN")

@@ -21,6 +21,9 @@ func main() {
 	// Web frontend
 	router.HandleFunc("/web/{token}/uploads", web.UploadsPage).Methods("GET")
 
+	// Main page
+	router.HandleFunc("/", web.MainPage).Methods("GET")
+
 	router.PathPrefix("/css/").Handler(http.StripPrefix("/css/", http.FileServer(http.Dir("css"))))
 
 	router.HandleFunc("/api/upload", b.UploadFile).Methods("POST")
