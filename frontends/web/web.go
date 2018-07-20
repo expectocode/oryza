@@ -63,5 +63,5 @@ func UploadsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func MainPage(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("unix.porn upload service for /rice/ and friends. you can access a list of your files at https://up.unix.porn/web/{your token}/uploads"))
+	w.Write([]byte("unix.porn upload service for /rice/ and friends. you can access a list of your files at https://up.unix.porn/web/{your token}/uploads. See https://github.com/expectocode/oryza for details"))
 }
