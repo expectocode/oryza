@@ -1,5 +1,5 @@
 config.sh
-frontends/oryzabot
+frontends/oryzabot/oryzabot
 backend/backend
 backend/tls
 404.png
