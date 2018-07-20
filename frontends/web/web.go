@@ -55,30 +55,9 @@ func UploadsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// is there a better way to put this into the correct struct?
-	// var uploads []m.FileListing
 	if data["success"] == true {
-		// for _, el := range data["uploads"] {
-			// upload := m.FileListing{el["url"], el["size"], el["date-uploaded"],
-				// el["shorturi"], el["longuri"], el["mimetype"], el["extra-info"], el["deleted"]}
-		// }
-		// log.Println(data["uploads"])
-		// uploads, ok := data["uploads"].([]m.FileListing)
-		// if !ok {
-			// fail(w, "Could not parse response")
-			// log.Println("Error converting response uploads to FileListings: ")
-			// return
-		// }
-		// log.Println(uploads)
 		tmpl.Execute(w, data["uploads"])
 	} else {
 		fail(w, data["reason"].(string))
 	}
-
-	// err = tmpl.Execute(os.Stdout, data)
-	// if err != nil {
-	// fail("Could not generate file listing")
-	// fmt.Println("Error getting json from backend", err)
-	// return
-	// }
-
 }

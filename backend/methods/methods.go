@@ -54,8 +54,8 @@ func fail(w http.ResponseWriter, reason string) {
 }
 
 type ListingResponse struct {
-	Uploads []m.FileListing   `json:"uploads"`
-	Success bool		      `json:"success"`
+	Uploads []m.FileListing `json:"uploads"`
+	Success bool            `json:"success"`
 }
 
 func (b Backend) ListUploads(w http.ResponseWriter, r *http.Request) {

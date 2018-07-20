@@ -20,7 +20,7 @@ type File struct {
 
 type FileListing struct {
 	URL          string `json:"url"`
-	Size         int    `json:"size"`          // bytes
+	Size         int    `json:"size"`         // bytes
 	DateUploaded int    `json:"dateuploaded"` // unix timestamp
 	ShortURI     string `json:"shorturi"`
 	LongURI      string `json:"longuri"`

@@ -29,7 +29,6 @@ func main() {
 	router.HandleFunc("/{fileid}", b.DeleteFile).Methods("DELETE")
 	router.HandleFunc("/{fileid}", b.GetFile).Methods("GET")
 
-
 	// TODO add token existence verification
 	// TODO detail-related api calls
 
