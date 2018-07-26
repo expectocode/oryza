@@ -32,7 +32,7 @@ func UploadsPage(w http.ResponseWriter, r *http.Request) {
 
 	// Make GET request to backend
 	payload := url.Values{}
-	payload.Add("token", token) // TODO secret handling
+	payload.Add("token", token)
 	resp, err := http.Get("https://up.unix.porn/api/list-uploads?" + payload.Encode())
 	if err != nil {
 		panic(err)
@@ -63,5 +63,5 @@ func UploadsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func MainPage(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("unix.porn upload service for /rice/ and friends. you can access a list of your files at https://up.unix.porn/web/{your token}/uploads. See https://github.com/expectocode/oryza for details"))
+	w.Write([]byte("unix.porn upload service for /rice/ and friends. you can access a list of your files at https://up.unix.porn/web/{your token}/uploads. See https://github.com/expectocode/oryza for details."))
 }
