@@ -3,8 +3,8 @@ package urlgen
 import (
 	"fmt"
 	"math/rand"
-	"time"
 	"mime"
+	"time"
 )
 
 func choice(arr *[]string) string {
@@ -13,6 +13,7 @@ func choice(arr *[]string) string {
 
 var abbrs []string
 var adjs []string
+
 //var ings []string
 var verbs []string
 var nouns []string
@@ -57,29 +58,29 @@ func GenLongUri() string {
 
 const alnumBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 const (
-    letterIdxBits = 6                    // 6 bits to represent a 62-letter index
-    letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-    letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+	letterIdxBits = 6                    // 6 bits to represent a 62-letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 )
 
 // thanks stackoverflow
 func RandAlphanum(n int) string {
 	// Generate a decent random string of length n from alnumBytes
-    b := make([]byte, n)
-    // A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
-    for i, cache, remain := n-1, rand.Int63(), letterIdxMax; i >= 0; {
-        if remain == 0 {
-            cache, remain = rand.Int63(), letterIdxMax
-        }
-        if idx := int(cache & letterIdxMask); idx < len(alnumBytes) {
-            b[i] = alnumBytes[idx]
-            i--
-        }
-        cache >>= letterIdxBits
-        remain--
-    }
+	b := make([]byte, n)
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := n-1, rand.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = rand.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(alnumBytes) {
+			b[i] = alnumBytes[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
 
-    return string(b)
+	return string(b)
 }
 
 func GetExtension(mimetype string) string {
@@ -90,9 +91,9 @@ func GetExtension(mimetype string) string {
 		ext = string(exts[0])
 	} else {
 		// No detected extension
-		var extras map[string]string{
-			"image/webp":		".webp",
-			"text/x-python":	".py"
+		extras := map[string]string{
+			"image/webp":    ".webp",
+			"text/x-python": ".py",
 		}
 		ext = extras[mimetype]
 	}

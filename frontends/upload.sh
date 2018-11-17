@@ -55,7 +55,7 @@ fi
 
 # Upload and notify
 resp=$(curl --silent -X POST -F mimetype="$mime" -F uploadfile="@$file" -F token=$token https://up.unix.porn/api/upload)
-# Where would we souce extra info from? CLI dialog? args?
+# Where would we source extra info from? CLI dialog? args?
 if [[ -z $resp ]]; then # if it is empty
 	# cancel
 	notify-send "failed to upload, empty response"
@@ -64,5 +64,5 @@ fi
 notify-send "$resp"
 url=$(echo "$resp" | jq -r .url)
 xdg-open "$url"
-xclip <<< $url
-xclip -selection clipboard <<< $url
+xclip <<< "$url"
+xclip -selection clipboard <<< "$url"
