@@ -2,7 +2,10 @@
 source ~/.config/oryza
 # This should define $token
 
+PATH=$PATH:~/.cargo/bin
 # This script requires `jq`, since the server replies with a JSON response
+
+set -euo pipefail
 
 screenshooter() {
 	# Feel free to switch this out for a different screenshot tool and set $ to the saved image
@@ -16,6 +19,13 @@ screenshooter() {
 		notify-send "cancelled screenshot upload, no matching file"
 		exit 1
 	fi
+}
+
+shotgunner() {
+	sel=$(slop -f  "-i %i -g %g") #|| notify-send "cancelled"; exit 1)
+	file=$(date +"/tmp/screenshot_%Y-%m-%d_%H.%M.%S.png")
+	shotgun $sel $file
+	mime="image/png"
 }
 
 uploadfile() {
@@ -33,17 +43,19 @@ uploadfile() {
 
 if [[ "$#" -eq 1 ]]; then
 	# we have one argument. it's a file.
+	file=$1
 	echo "doing file $file"
 	location="$@"
 	uploadfile
 	echo "doing file $file with mime $mime"
 else
-	screenshooter
+	#screenshooter
+	shotgunner
 fi
 
 # Upload and notify
-resp=$(curl --silent -X POST -F mimetype="$mime" -F uploadfile="@$file" -F token=$token http://up.unix.porn/api/upload)
-# Where would we source extra info from? CLI dialog? args?
+resp=$(curl --silent -X POST -F mimetype="$mime" -F uploadfile="@$file" -F token=$token https://up.unix.porn/api/upload)
+# Where would we souce extra info from? CLI dialog? args?
 if [[ -z $resp ]]; then # if it is empty
 	# cancel
 	notify-send "failed to upload, empty response"
@@ -51,6 +63,6 @@ if [[ -z $resp ]]; then # if it is empty
 fi
 notify-send "$resp"
 url=$(echo "$resp" | jq -r .url)
-xdg-open "http://$url"
+xdg-open "$url"
 xclip <<< $url
 xclip -selection clipboard <<< $url
